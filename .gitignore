@@ -1,0 +1,5 @@
+build
+backend/.venv
+backend/models
+backend/uv.lock
+backend/.venv/.lock
