@@ -1,6 +1,7 @@
 import os
 import re
 import asyncio
+import json
 import numpy as np
 import onnxruntime as ort
 import requests
@@ -27,24 +28,59 @@ class TTSRequest(BaseModel):
     backend: str = "ROCm"
     voice: str = "default"
 
+# Constants
+PIPER_VOICES_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json"
+VOICES_FILE = os.path.join(MODEL_DIR, "voices.json")
+
 # Mapping display names to their Hugging Face relative paths
-# Structure: en/en_US/<name>/<quality>/<name>.onnx
-VOICE_MAP = {
-    "Amy (Low)": "en/en_US/amy/low/en_US-amy-low.onnx",
-    "Lessac (Low)": "en/en_US/lessac/low/en_US-lessac-low.onnx",
-    "Kristin (Medium)": "en/en_US/kristin/medium/en_US-kristin-medium.onnx",
-    "Ryan (High)": "en/en_US/ryan/high/en_US-ryan-high.onnx",
-    "Danny (Low)": "en/en_US/danny/low/en_US-danny-low.onnx",
-    "Joe (Medium)": "en/en_US/joe/medium/en_US-joe-medium.onnx"
-}
+# This will be populated from voices.json
+VOICE_DATA = {}
+
+def update_voices_json():
+    global VOICE_DATA
+    try:
+        print("Fetching latest Piper voices list...")
+        r = requests.get(PIPER_VOICES_URL)
+        if r.status_code == 200:
+            with open(VOICES_FILE, "w") as f:
+                f.write(r.text)
+            VOICE_DATA = r.json()
+            print(f"Loaded {len(VOICE_DATA)} voices.")
+        else:
+            print(f"Failed to fetch voices.json: {r.status_code}")
+    except Exception as e:
+        print(f"Error fetching voices: {e}")
+        if os.path.exists(VOICES_FILE):
+            with open(VOICES_FILE, "r") as f:
+                VOICE_DATA = json.load(f)
+
+# Initial load
+if os.path.exists(VOICES_FILE):
+    with open(VOICES_FILE, "r") as f:
+        VOICE_DATA = json.load(f)
+else:
+    update_voices_json()
 
 def strip_twitch_emotes(text):
-    # Strip common patterns and emojis
-    text = re.sub(r'[^\x00-\x7F]+', '', text)
+    # Strip emojis (Unicode range for emojis)
+    # This covers most common emojis while preserving international text
+    emoji_pattern = re.compile("["
+        u"\U0001f600-\U0001f64f"  # emoticons
+        u"\U0001f300-\U0001f5ff"  # symbols & pictographs
+        u"\U0001f680-\U0001f6ff"  # transport & map symbols
+        u"\U0001f1e0-\U0001f1ff"  # flags (iOS)
+        u"\U00002702-\U000027b0"
+        u"\U000024c2-\U0001f251"
+        "]+", flags=re.UNICODE)
+    text = emoji_pattern.sub(r'', text)
+    
     # Strip common Twitch Emotes
     emotes = ["LUL", "PogChamp", "Kappa", "ResidentSleeper", "BibleThump", "Pog", "OMEGALUL", "AYAYA", "Kreygasm"]
     for emote in emotes:
         text = re.sub(r'\b' + emote + r'\b', '', text)
+    
+    # Clean up multiple spaces
+    text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 @app.get("/status")
@@ -60,26 +96,40 @@ def get_status():
 @app.get("/voices")
 def list_voices():
     voices = []
-    for display_name, rel_path in VOICE_MAP.items():
-        voice_id = os.path.basename(rel_path).replace(".onnx", "")
-        onnx_path = os.path.join(MODEL_DIR, f"{voice_id}.onnx")
+    # Sort voices: downloaded first, then by language and name
+    for voice_id, info in VOICE_DATA.items():
+        onnx_filename = f"{voice_id}.onnx"
+        onnx_path = os.path.join(MODEL_DIR, onnx_filename)
+        
+        lang_name = info.get("language", {}).get("name_english", "Unknown")
+        quality = info.get("quality", "medium")
+        display_name = f"[{lang_name}] {info.get('name', voice_id)} ({quality})"
+        
         voices.append({
             "id": voice_id,
             "display_name": display_name,
             "downloaded": os.path.exists(onnx_path),
             "progress": download_progress.get(voice_id, 0)
         })
+    
+    # Sort to bring English voices to top for convenience
+    voices.sort(key=lambda x: (not x["downloaded"], "English" not in x["display_name"], x["display_name"]))
     return voices
 
 @app.post("/download_voice/{voice_id}")
 async def download_voice(voice_id: str, background_tasks: BackgroundTasks):
-    # Find the relative path for this voice_id
-    rel_path = next((path for path in VOICE_MAP.values() if voice_id in path), None)
-    if not rel_path:
-        raise HTTPException(status_code=404, detail="Voice not found")
+    if voice_id not in VOICE_DATA:
+        raise HTTPException(status_code=404, detail="Voice not found in Piper database")
     
-    background_tasks.add_task(perform_download, voice_id, rel_path)
-    return {"message": "Download started"}
+    # Find the ONNX file path in the files map
+    files = VOICE_DATA[voice_id].get("files", {})
+    onnx_rel_path = next((path for path in files if path.endswith(".onnx")), None)
+    
+    if not onnx_rel_path:
+        raise HTTPException(status_code=404, detail="ONNX file path not found for this voice")
+    
+    background_tasks.add_task(perform_download, voice_id, onnx_rel_path)
+    return {"message": f"Download started for {voice_id}"}
 
 def perform_download(voice_id: str, rel_path: str):
     base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main"

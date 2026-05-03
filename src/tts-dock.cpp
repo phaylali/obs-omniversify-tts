@@ -50,6 +50,8 @@ TTSDock::TTSDock(QWidget *parent) : QWidget(parent)
     connect(refreshTimer, &QTimer::timeout, this, &TTSDock::RefreshVoices);
     refreshTimer->start(2000);
 
+    connect(networkManager, &QNetworkAccessManager::finished, this, &TTSDock::OnReplyFinished);
+
     SetupUI();
     RefreshVoices();
 }
@@ -272,7 +274,53 @@ void TTSDock::OnTwitchDisconnected() {}
 void TTSDock::OnTwitchError(QAbstractSocket::SocketError) {}
 void TTSDock::OnKickDisconnected() {}
 void TTSDock::OnKickError(QAbstractSocket::SocketError) {}
-void TTSDock::OnReplyFinished(QNetworkReply *reply) { /* Handle voice list updates here if needed */ reply->deleteLater(); }
+void TTSDock::OnReplyFinished(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) return;
+
+    QUrl url = reply->url();
+    if (url.path() == "/voices") {
+        QByteArray data = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        QJsonArray voices = doc.array();
+
+        QString currentVoice = voiceSelector->currentData().toString();
+        
+        // Temporarily block signals to avoid triggering selection changes while rebuilding
+        voiceSelector->blockSignals(true);
+        voiceSelector->clear();
+        
+        for (int i = 0; i < voices.size(); ++i) {
+            QJsonObject voice = voices[i].toObject();
+            QString id = voice["id"].toString();
+            QString name = voice["display_name"].toString();
+            bool downloaded = voice["downloaded"].toBool();
+            int progress = voice["progress"].toInt();
+
+            voiceSelector->addItem(name, id);
+            int idx = voiceSelector->count() - 1;
+            voiceSelector->setItemData(idx, downloaded, Qt::UserRole + 1);
+            voiceSelector->setItemData(idx, progress, Qt::UserRole + 2);
+
+            if (id == currentVoice) {
+                voiceSelector->setCurrentIndex(idx);
+            }
+        }
+        
+        // If nothing was selected and we have voices, select the first one (usually English/Downloaded)
+        if (voiceSelector->currentIndex() == -1 && voiceSelector->count() > 0) {
+            voiceSelector->setCurrentIndex(0);
+        }
+
+        voiceSelector->blockSignals(false);
+        
+        // Update download button state
+        bool currentDownloaded = voiceSelector->currentData(Qt::UserRole + 1).toBool();
+        downloadButton->setEnabled(!currentDownloaded);
+        downloadButton->setText(currentDownloaded ? "Downloaded" : "Download");
+    }
+}
 void TTSDock::OnSimulationToggled(bool) {}
 void TTSDock::InsertEmoji() {}
 
