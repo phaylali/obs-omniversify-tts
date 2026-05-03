@@ -41,11 +41,25 @@ cp "$PROJECT_NAME.so" "$PLUGIN_DEST"
 echo "✅ Build and Installation complete!"
 echo "🚀 Launching OBS Studio..."
 obs &
+OBS_PID=$!
 
 echo "🎙️ Launching TTS Backend..."
 cd ..
 cd backend
 LD_LIBRARY_PATH=/opt/rocm/lib uv run python main.py &
+TTS_PID=$!
 cd ..
 
-echo "✨ All systems go!"
+function cleanup {
+    echo ""
+    echo "🛑 Shutting down OBS and TTS Backend..."
+    kill $OBS_PID 2>/dev/null || true
+    kill $TTS_PID 2>/dev/null || true
+    echo "✅ Shutdown complete."
+    exit 0
+}
+
+trap cleanup SIGINT SIGTERM
+
+echo "✨ All systems go! (Press Ctrl+C to stop everything)"
+wait

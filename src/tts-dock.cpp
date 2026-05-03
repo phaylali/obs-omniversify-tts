@@ -262,13 +262,19 @@ void TTSDock::SendToTTS(const QString &text)
     json["engine"] = engineSelector->currentText();
     json["backend"] = backendSelector->currentText().contains("ROCm") ? "ROCm" : "Vulkan";
     json["voice"] = voiceSelector->currentData().toString();
-    networkManager->post(QNetworkRequest(QUrl("http://127.0.0.1:6973/tts")), QJsonDocument(json).toJson());
+    
+    QNetworkRequest request(QUrl("http://127.0.0.1:6973/tts"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    networkManager->post(request, QJsonDocument(json).toJson());
 }
 
 // Boilerplate/Stubs
 void TTSDock::DisconnectChat() { twitchSocket->close(); kickSocket->close(); isConnected = false; connectButton->setText("Connect Streams"); }
 void TTSDock::RefreshVoices() { networkManager->get(QNetworkRequest(QUrl("http://127.0.0.1:6973/voices"))); }
-void TTSDock::OnVoiceDownloadClicked() { networkManager->post(QNetworkRequest(QUrl("http://127.0.0.1:6973/download_voice/" + voiceSelector->currentData().toString())), QByteArray()); }
+void TTSDock::OnVoiceDownloadClicked() { 
+    QNetworkRequest request(QUrl("http://127.0.0.1:6973/download_voice/" + voiceSelector->currentData().toString()));
+    networkManager->post(request, QByteArray()); 
+}
 void TTSDock::HandleTestTTS() { ProcessChatMessage("Tester", testInput->text(), "#ffffff", "Sim"); SendToTTS(testInput->text()); testInput->clear(); }
 void TTSDock::OnTwitchDisconnected() {}
 void TTSDock::OnTwitchError(QAbstractSocket::SocketError) {}
