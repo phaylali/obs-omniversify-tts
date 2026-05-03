@@ -86,6 +86,7 @@ private:
     QWebSocket *twitchSocket;
     QWebSocket *kickSocket;
     QTimer *refreshTimer;
+    QString pendingKickId;
     bool isConnected = false;
 
     void SetupUI();

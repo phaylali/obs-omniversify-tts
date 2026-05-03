@@ -150,18 +150,24 @@ void TTSDock::OnTwitchConnected()
 
 void TTSDock::ConnectKick(const QString &channel)
 {
-    // Kick uses Pusher. This is a simplified connection to the Pusher app Kick uses.
-    // Real implementation usually needs a room ID, but some channels use the name.
-    kickSocket->open(QUrl("wss://ws-us2.pusher.com/app/eb1d5f283081a78b93bb?protocol=7&client=js&version=7.4.0"));
-    chatPreview->append("<i style='color: #53FC18;'>Connecting to Kick...</i>");
+    // First fetch the ID from our backend to bypass Cloudflare
+    networkManager->get(QNetworkRequest(QUrl("http://127.0.0.1:6973/kick/id/" + channel)));
+    chatPreview->append("<i style='color: #53FC18;'>Fetching Kick Channel ID...</i>");
 }
 
 void TTSDock::OnKickConnected()
 {
-    // Pusher requires a subscription message
-    // Note: This logic assumes we know the room ID or can subscribe via channel name
-    // For now, we subscribe to a placeholder. Real Kick API call would fetch room ID first.
-    chatPreview->append("<i style='color: #53FC18;'>Kick Socket Established.</i>");
+    if (pendingKickId.isEmpty()) return;
+
+    // Subscribe to the chatroom channel
+    QJsonObject subscribe;
+    subscribe["event"] = "pusher:subscribe";
+    QJsonObject data;
+    data["channel"] = "chatrooms." + pendingKickId + ".v2";
+    subscribe["data"] = data;
+
+    kickSocket->sendTextMessage(QJsonDocument(subscribe).toJson(QJsonDocument::Compact));
+    chatPreview->append("<i style='color: #53FC18;'>Kick Chat Subscribed!</i>");
 }
 
 void TTSDock::OnTwitchMessageReceived(const QString &message)
@@ -325,6 +331,22 @@ void TTSDock::OnReplyFinished(QNetworkReply *reply)
         bool currentDownloaded = voiceSelector->currentData(Qt::UserRole + 1).toBool();
         downloadButton->setEnabled(!currentDownloaded);
         downloadButton->setText(currentDownloaded ? "Downloaded" : "Download");
+    } else if (url.path().startsWith("/kick/id/")) {
+        QByteArray data = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        QJsonObject obj = doc.object();
+        
+        QString chatroomId;
+        if (obj["id"].isString()) chatroomId = obj["id"].toString();
+        else chatroomId = QString::number(obj["id"].toInt());
+
+        if (!chatroomId.isEmpty() && chatroomId != "0") {
+            pendingKickId = chatroomId;
+            kickSocket->open(QUrl("wss://ws-us2.pusher.com/app/eb1d5f283081a78b93bb?protocol=7&client=js&version=7.4.0"));
+            chatPreview->append("<i style='color: #53FC18;'>ID Found: " + chatroomId + ". Connecting to Kick Socket...</i>");
+        } else {
+            chatPreview->append("<i style='color: #ff4444;'>Failed to get Kick Chatroom ID.</i>");
+        }
     }
 }
 void TTSDock::OnSimulationToggled(bool) {}

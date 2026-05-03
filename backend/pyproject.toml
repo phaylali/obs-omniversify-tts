@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "curl_cffi>=0.9.3",
     "numpy>=2.2.3",
     "fastapi>=0.136.1",
     "onnxruntime-rocm>=1.22.2.post1",

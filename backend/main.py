@@ -5,6 +5,7 @@ import json
 import numpy as np
 import onnxruntime as ort
 import requests
+from curl_cffi import requests as crequests
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import sounddevice as sd
@@ -92,6 +93,26 @@ def get_status():
         "rocm_available": "ROCMExecutionProvider" in providers,
         "vulkan_available": "VulkanExecutionProvider" in providers
     }
+
+@app.get("/kick/id/{channel}")
+def get_kick_id(channel: str):
+    url = f"https://kick.com/api/v1/channels/{channel}"
+    try:
+        # Use curl_cffi to impersonate a browser (Chrome)
+        r = crequests.get(url, impersonate="chrome")
+        if r.status_code == 200:
+            data = r.json()
+            chatroom_id = data.get("chatroom", {}).get("id")
+            if chatroom_id:
+                return {"id": chatroom_id}
+            else:
+                raise HTTPException(status_code=404, detail="Chatroom ID not found in Kick response")
+        else:
+            raise HTTPException(status_code=r.status_code, detail=f"Kick API error: {r.status_code}")
+    except Exception as e:
+        print(f"Error fetching Kick ID for {channel}: {e}")
+        # Fallback to a common pattern or a known public API if this fails
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/voices")
 def list_voices():
