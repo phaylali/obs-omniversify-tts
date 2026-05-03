@@ -9,6 +9,10 @@ PLUGIN_DEST="$HOME/.config/obs-studio/plugins/$PROJECT_NAME/bin/64bit/"
 
 echo "🚀 Starting CLEAN build process for $PROJECT_NAME..."
 
+# Shutdown existing TTS server if running
+echo "🛑 Shutting down previous TTS server on port 6973..."
+fuser -k 6973/tcp 2>/dev/null || true
+
 # Remove old build directory for a fresh start
 if [ -d "$BUILD_DIR" ]; then
     echo "🧹 Cleaning previous build..."
@@ -37,3 +41,11 @@ cp "$PROJECT_NAME.so" "$PLUGIN_DEST"
 echo "✅ Build and Installation complete!"
 echo "🚀 Launching OBS Studio..."
 obs &
+
+echo "🎙️ Launching TTS Backend..."
+cd ..
+cd backend
+LD_LIBRARY_PATH=/opt/rocm/lib uv run python main.py &
+cd ..
+
+echo "✨ All systems go!"
