@@ -28,6 +28,8 @@ class TTSRequest(BaseModel):
     engine: str = "Piper"
     backend: str = "ROCm"
     voice: str = "default"
+    volume: float = 1.0
+    channel: str = ""
 
 # Constants
 PIPER_VOICES_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json"
@@ -62,7 +64,7 @@ if os.path.exists(VOICES_FILE):
 else:
     update_voices_json()
 
-def strip_twitch_emotes(text):
+def strip_twitch_emotes(text, channel=""):
     # Strip emojis (Unicode range for emojis)
     # This covers most common emojis while preserving international text
     emoji_pattern = re.compile("["
@@ -79,6 +81,10 @@ def strip_twitch_emotes(text):
     emotes = ["LUL", "PogChamp", "Kappa", "ResidentSleeper", "BibleThump", "Pog", "OMEGALUL", "AYAYA", "Kreygasm"]
     for emote in emotes:
         text = re.sub(r'\b' + emote + r'\b', '', text)
+    
+    # Strip sub emotes starting with channel name (e.g. phaylaliAYAYA)
+    if channel:
+        text = re.sub(r'\b' + re.escape(channel) + r'[A-Z][a-zA-Z0-9]+\b', '', text)
     
     # Clean up multiple spaces
     text = re.sub(r'\s+', ' ', text).strip()
@@ -104,6 +110,7 @@ def get_kick_id(channel: str):
             data = r.json()
             chatroom_id = data.get("chatroom", {}).get("id")
             if chatroom_id:
+                print(f"Retrieved Kick Chatroom ID for {channel}: {chatroom_id}")
                 return {"id": chatroom_id}
             else:
                 raise HTTPException(status_code=404, detail="Chatroom ID not found in Kick response")
@@ -204,7 +211,7 @@ def load_voice(engine: str, voice_id: str, backend: str):
 @app.post("/tts")
 async def generate_tts(request: TTSRequest):
     try:
-        clean_text = strip_twitch_emotes(request.text)
+        clean_text = strip_twitch_emotes(request.text, request.channel)
         if not clean_text.strip():
             return {"status": "skipped"}
 
@@ -226,7 +233,9 @@ async def generate_tts(request: TTSRequest):
 
         audio_np = await asyncio.to_thread(synthesize)
         if audio_np is not None:
-            sd.play(audio_np.astype(np.float32) / 32768.0, voice.config.sample_rate)
+            # Apply volume scaling
+            audio_float = (audio_np.astype(np.float32) / 32768.0) * request.volume
+            sd.play(audio_float, voice.config.sample_rate)
         
         return {"status": "success"}
     except Exception as e:

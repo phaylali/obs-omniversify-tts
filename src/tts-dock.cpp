@@ -84,6 +84,27 @@ void TTSDock::SetupUI()
     settingsGroup->setLayout(settingsLayout);
     mainLayout->addWidget(settingsGroup);
 
+    // Audio Controls
+    audioGroup = new QGroupBox("Audio Controls");
+    QHBoxLayout *audioLayout = new QHBoxLayout();
+    muteButton = new QPushButton("🔈");
+    muteButton->setFixedWidth(40);
+    muteButton->setCheckable(true);
+    connect(muteButton, &QPushButton::toggled, [this](bool checked) {
+        muteButton->setText(checked ? "🔇" : "🔈");
+    });
+    
+    QLabel *volLabel = new QLabel("Vol:");
+    volumeSlider = new QSlider(Qt::Horizontal);
+    volumeSlider->setRange(0, 100);
+    volumeSlider->setValue(80);
+    
+    audioLayout->addWidget(muteButton);
+    audioLayout->addWidget(volLabel);
+    audioLayout->addWidget(volumeSlider);
+    audioGroup->setLayout(audioLayout);
+    mainLayout->addWidget(audioGroup);
+
     // Stream Integration
     streamGroup = new QGroupBox("Channel Integration");
     QVBoxLayout *streamLayout = new QVBoxLayout();
@@ -167,7 +188,6 @@ void TTSDock::OnKickConnected()
     subscribe["data"] = data;
 
     kickSocket->sendTextMessage(QJsonDocument(subscribe).toJson(QJsonDocument::Compact));
-    chatPreview->append("<i style='color: #53FC18;'>Kick Chat Subscribed!</i>");
 }
 
 void TTSDock::OnTwitchMessageReceived(const QString &message)
@@ -200,7 +220,7 @@ void TTSDock::OnTwitchMessageReceived(const QString &message)
         }
 
         ProcessChatMessage(username, htmlMsg, "#9146FF", "Twitch");
-        SendToTTS(ttsMsg);
+        SendToTTS(ttsMsg, twitchInput->text().trimmed());
     }
 }
 
@@ -230,12 +250,26 @@ QString TTSDock::ParseTwitchEmotes(const QString &message, const QString &emotes
 
 void TTSDock::OnKickMessageReceived(const QString &message)
 {
+
     QJsonDocument doc = QJsonDocument::fromJson(message.toUtf8());
     QJsonObject obj = doc.object();
     QString event = obj["event"].toString();
 
-    if (event == "App\\Events\\ChatMessageEvent") {
-        QJsonObject data = QJsonDocument::fromJson(obj["data"].toString().toUtf8()).object();
+    if (event == "pusher:ping") {
+        QJsonObject pong;
+        pong["event"] = "pusher:pong";
+        kickSocket->sendTextMessage(QJsonDocument(pong).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    if (event.contains("ChatMessageEvent")) {
+        QJsonObject data;
+        if (obj["data"].isObject()) {
+            data = obj["data"].toObject();
+        } else {
+            data = QJsonDocument::fromJson(obj["data"].toString().toUtf8()).object();
+        }
+        
         QString username = data["sender"].toObject()["username"].toString();
         QString content = data["content"].toString();
         
@@ -247,7 +281,7 @@ void TTSDock::OnKickMessageReceived(const QString &message)
         ttsMsg.replace(kickEmote, "");
 
         ProcessChatMessage(username, htmlMsg, "#53FC18", "Kick");
-        SendToTTS(ttsMsg);
+        SendToTTS(ttsMsg, kickInput->text().trimmed());
     } else if (event == "pusher:connection_established") {
         // Now subscribe to the chatroom (Ideally we fetch room ID from Kick API first)
         // For demonstration, we assume a room ID or subscription logic here
@@ -260,14 +294,16 @@ void TTSDock::ProcessChatMessage(const QString &username, const QString &message
     chatPreview->append(html);
 }
 
-void TTSDock::SendToTTS(const QString &text)
+void TTSDock::SendToTTS(const QString &text, const QString &channel)
 {
     if (text.trimmed().isEmpty()) return;
     QJsonObject json;
     json["text"] = text;
+    json["channel"] = channel;
     json["engine"] = engineSelector->currentText();
     json["backend"] = backendSelector->currentText().contains("ROCm") ? "ROCm" : "Vulkan";
     json["voice"] = voiceSelector->currentData().toString();
+    json["volume"] = muteButton->isChecked() ? 0.0 : (double)volumeSlider->value() / 100.0;
     
     QNetworkRequest request(QUrl("http://127.0.0.1:6973/tts"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -342,8 +378,10 @@ void TTSDock::OnReplyFinished(QNetworkReply *reply)
 
         if (!chatroomId.isEmpty() && chatroomId != "0") {
             pendingKickId = chatroomId;
-            kickSocket->open(QUrl("wss://ws-us2.pusher.com/app/eb1d5f283081a78b93bb?protocol=7&client=js&version=7.4.0"));
-            chatPreview->append("<i style='color: #53FC18;'>ID Found: " + chatroomId + ". Connecting to Kick Socket...</i>");
+            QString url = QString("wss://ws-%1.pusher.com/app/%2?protocol=7&client=js&version=7.4.0")
+                            .arg(kickPusherCluster, kickPusherKey);
+            kickSocket->open(QUrl(url));
+            chatPreview->append("<i style='color: #53FC18;'>Connecting to Kick...</i>");
         } else {
             chatPreview->append("<i style='color: #ff4444;'>Failed to get Kick Chatroom ID.</i>");
         }

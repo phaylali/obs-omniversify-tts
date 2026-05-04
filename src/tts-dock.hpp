@@ -59,6 +59,9 @@ private:
     QVBoxLayout *mainLayout;
     
     // Engine & Backend Selection
+    QGroupBox *audioGroup;
+    QSlider *volumeSlider;
+    QPushButton *muteButton;
     QGroupBox *settingsGroup;
     QComboBox *engineSelector;
     QComboBox *backendSelector;
@@ -87,6 +90,8 @@ private:
     QWebSocket *kickSocket;
     QTimer *refreshTimer;
     QString pendingKickId;
+    QString kickPusherKey = "32cbd69e4b950bf97679";
+    QString kickPusherCluster = "us2";
     bool isConnected = false;
 
     void SetupUI();
@@ -95,7 +100,7 @@ private:
     void DisconnectChat();
     
     void ProcessChatMessage(const QString &username, const QString &message, const QString &color, const QString &platform);
-    void SendToTTS(const QString &text);
+    void SendToTTS(const QString &text, const QString &channel = "");
     
     QString ParseTwitchEmotes(const QString &message, const QString &emotesTag, QString &ttsText);
     QString ParseKickEmotes(const QString &message, QString &ttsText);
