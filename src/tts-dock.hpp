@@ -7,6 +7,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QComboBox>
+#include <QSpinBox>
 #include <QLabel>
 #include <QCheckBox>
 #include <QTextEdit>
@@ -67,6 +68,11 @@ private:
     QComboBox *backendSelector;
     QComboBox *voiceSelector;
     QPushButton *downloadButton;
+
+    // Server status & port
+    QLabel *serverStatus;
+    QSpinBox *portSpin;
+    void RefreshServerStatus();
 
     // Stream Integration
     QGroupBox *streamGroup;

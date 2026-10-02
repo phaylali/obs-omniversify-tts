@@ -1,0 +1,29 @@
+# Maintainer: phaylali <phaylali at github>
+pkgname=obs-omniversify-multichat-plugin
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="OBS dock for multichat (Twitch/Kick) chat preview with local GPU-accelerated TTS; auto-starts its TTS backend with OBS"
+arch=('x86_64')
+url="https://github.com/phaylali/obs-omniversify-tts"
+license=('MIT')
+depends=('obs-studio' 'qt6-base' 'qt6-websockets'
+         'python' 'python-fastapi' 'uvicorn' 'python-pydantic'
+         'python-onnxruntime-rocm' 'python-numpy' 'python-requests'
+         'python-curl_cffi' 'python-pydub' 'python-soundfile'
+         'python-pathvalidate' 'python-sounddevice' 'piper-tts')
+makedepends=('cmake' 'gcc')
+# For AUR publication switch source to:
+#   "$pkgname-$pkgver.tar.gz::https://github.com/phaylali/obs-omniversify-tts/archive/refs/tags/v$pkgver.tar.gz"
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('b8267b487c4754d57f13ee53117e234d9fdad9ab2ddfe9030de8948529d9dc39')
+
+build() {
+  cmake -B build -S "$pkgname-$pkgver" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build -j"$(nproc)"
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

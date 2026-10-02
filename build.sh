@@ -1,65 +1,18 @@
 #!/bin/bash
+# Dev build script for obs-omniversify-multichat-plugin.
+#
+# The plugin now starts the TTS backend itself when OBS loads, so this script
+# only builds and installs the plugin. Launch OBS normally afterwards
+# (e.g. Super+O) — the dock and server come up automatically.
 
-# Exit on error
 set -e
+cd "$(dirname "$0")"
 
-PROJECT_NAME="obs-omniversify-tts"
-BUILD_DIR="build"
-PLUGIN_DEST="$HOME/.config/obs-studio/plugins/$PROJECT_NAME/bin/64bit/"
+echo "🚀 Building obs-omniversify-multichat-plugin..."
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j"$(nproc)"
 
-echo "🚀 Starting CLEAN build process for $PROJECT_NAME..."
+echo "📦 Installing to /usr/lib/obs-plugins/ (needs sudo)..."
+sudo cp build/obs-omniversify-multichat-plugin.so /usr/lib/obs-plugins/
 
-# Shutdown existing TTS server if running
-echo "🛑 Shutting down previous TTS server on port 6973..."
-fuser -k 6973/tcp 2>/dev/null || true
-
-# Remove old build directory for a fresh start
-if [ -d "$BUILD_DIR" ]; then
-    echo "🧹 Cleaning previous build..."
-    rm -rf "$BUILD_DIR"
-fi
-
-mkdir "$BUILD_DIR"
-cd "$BUILD_DIR"
-
-# Configure with CMake
-echo "🛠️ Configuring with CMake..."
-cmake ..
-
-# Build the project
-echo "📦 Building project..."
-make -j$(nproc)
-
-# Create destination directory if it doesn't exist
-echo "📂 Preparing installation directory..."
-mkdir -p "$PLUGIN_DEST"
-
-# Install the plugin
-echo "🚚 Installing plugin to OBS..."
-cp "$PROJECT_NAME.so" "$PLUGIN_DEST"
-
-echo "✅ Build and Installation complete!"
-echo "🚀 Launching OBS Studio..."
-obs &
-OBS_PID=$!
-
-echo "🎙️ Launching TTS Backend..."
-cd ..
-cd backend
-LD_LIBRARY_PATH=/opt/rocm/lib uv run python main.py &
-TTS_PID=$!
-cd ..
-
-function cleanup {
-    echo ""
-    echo "🛑 Shutting down OBS and TTS Backend..."
-    kill $OBS_PID 2>/dev/null || true
-    kill $TTS_PID 2>/dev/null || true
-    echo "✅ Shutdown complete."
-    exit 0
-}
-
-trap cleanup SIGINT SIGTERM
-
-echo "✨ All systems go! (Press Ctrl+C to stop everything)"
-wait
+echo "✅ Installed. Restart OBS to pick up the changes."

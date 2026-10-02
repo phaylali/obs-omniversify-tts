@@ -1,7 +1,10 @@
 import os
 import re
+import sys
+import argparse
 import asyncio
 import json
+import threading
 import numpy as np
 import onnxruntime as ort
 import requests
@@ -14,8 +17,23 @@ from piper import PiperVoice
 app = FastAPI(title="Omniversify TTS Backend")
 
 # Configuration
-BASE_DIR = os.path.dirname(__file__)
-MODEL_DIR = os.path.join(BASE_DIR, "models")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def resolve_model_dir() -> str:
+    """Models live next to the script in a dev checkout, but in a packaged
+    install /usr/share is read-only, so fall back to XDG data home."""
+    local = os.path.join(BASE_DIR, "models")
+    override = os.environ.get("OMNIVERSIFY_MODEL_DIR")
+    if override:
+        return override
+    if os.path.isdir(local) and os.access(local, os.W_OK):
+        return local
+    if os.path.isdir(local) and os.listdir(local):
+        return local  # read-only copy still usable for loading
+    xdg = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    return os.path.join(xdg, "obs-omniversify-multichat", "models")
+
+MODEL_DIR = resolve_model_dir()
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 # Cache for loaded voices
@@ -242,6 +260,32 @@ async def generate_tts(request: TTSRequest):
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+def ensure_default_voice():
+    """Fresh install: if no voice models exist yet, download the default one
+    in the background so TTS works without any user interaction."""
+    try:
+        if any(f.endswith(".onnx") for f in os.listdir(MODEL_DIR)):
+            return  # already have at least one voice
+        default_id = "en_US-lessac-low"  # fallback used by load_voice()
+        info = VOICE_DATA.get(default_id)
+        if not info:
+            return
+        files = info.get("files", {})
+        rel = next((p for p in files if p.endswith(".onnx")), None)
+        if not rel:
+            return
+        print(f"First run: downloading default voice '{default_id}'...")
+        threading.Thread(target=perform_download, args=(default_id, rel), daemon=True).start()
+    except Exception as e:
+        print(f"Default voice setup skipped: {e}")
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Omniversify TTS backend")
+    parser.add_argument("--port", type=int, default=6973,
+                        help="port to listen on (default: 6973)")
+    args = parser.parse_args()
+
+    ensure_default_voice()
+
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=6973)
+    uvicorn.run(app, host="127.0.0.1", port=args.port)

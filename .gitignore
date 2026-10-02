@@ -3,3 +3,8 @@ backend/.venv
 backend/models
 backend/uv.lock
 backend/.venv/.lock
+packaging/aur/*.tar.gz
+packaging/aur/*.pkg.tar.zst
+packaging/aur/src/
+packaging/aur/pkg/
+packaging/aur/.SRCINFO

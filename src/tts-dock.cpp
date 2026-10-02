@@ -1,4 +1,5 @@
 #include "tts-dock.hpp"
+#include "backend.hpp"
 #include <obs-frontend-api.h>
 #include <QMenu>
 #include <QJsonDocument>
@@ -81,6 +82,24 @@ void TTSDock::SetupUI()
     voiceRow->addWidget(voiceSelector, 1);
     voiceRow->addWidget(downloadButton);
     settingsLayout->addLayout(voiceRow);
+
+    // Server status + port
+    QHBoxLayout *serverRow = new QHBoxLayout();
+    serverStatus = new QLabel("TTS server: checking…");
+    portSpin = new QSpinBox();
+    portSpin->setRange(1024, 65535);
+    portSpin->setValue(BackendPort());
+    portSpin->setToolTip("TTS server port (restarts the server on change)");
+    serverRow->addWidget(serverStatus, 1);
+    serverRow->addWidget(new QLabel("Port:"));
+    serverRow->addWidget(portSpin);
+    settingsLayout->addLayout(serverRow);
+    connect(portSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int port) {
+        SetBackendPort(port);
+        RestartBackend();
+        serverStatus->setText("TTS server: restarting…");
+    });
+
     settingsGroup->setLayout(settingsLayout);
     mainLayout->addWidget(settingsGroup);
 
@@ -172,7 +191,7 @@ void TTSDock::OnTwitchConnected()
 void TTSDock::ConnectKick(const QString &channel)
 {
     // First fetch the ID from our backend to bypass Cloudflare
-    networkManager->get(QNetworkRequest(QUrl("http://127.0.0.1:6973/kick/id/" + channel)));
+    networkManager->get(QNetworkRequest(QUrl(BackendBaseUrl() + "/kick/id/" + channel)));
     chatPreview->append("<i style='color: #53FC18;'>Fetching Kick Channel ID...</i>");
 }
 
@@ -305,16 +324,24 @@ void TTSDock::SendToTTS(const QString &text, const QString &channel)
     json["voice"] = voiceSelector->currentData().toString();
     json["volume"] = muteButton->isChecked() ? 0.0 : (double)volumeSlider->value() / 100.0;
     
-    QNetworkRequest request(QUrl("http://127.0.0.1:6973/tts"));
+    QNetworkRequest request(QUrl(BackendBaseUrl() + "/tts"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     networkManager->post(request, QJsonDocument(json).toJson());
 }
 
 // Boilerplate/Stubs
 void TTSDock::DisconnectChat() { twitchSocket->close(); kickSocket->close(); isConnected = false; connectButton->setText("Connect Streams"); }
-void TTSDock::RefreshVoices() { networkManager->get(QNetworkRequest(QUrl("http://127.0.0.1:6973/voices"))); }
+void TTSDock::RefreshVoices() {
+    RefreshServerStatus();
+    networkManager->get(QNetworkRequest(QUrl(BackendBaseUrl() + "/voices")));
+}
+void TTSDock::RefreshServerStatus() {
+    bool up = BackendIsRunning();
+    serverStatus->setText(up ? "TTS server: ● running" : "TTS server: ○ offline");
+    serverStatus->setStyleSheet(up ? "color: #a6e3a1;" : "color: #f38ba8;");
+}
 void TTSDock::OnVoiceDownloadClicked() { 
-    QNetworkRequest request(QUrl("http://127.0.0.1:6973/download_voice/" + voiceSelector->currentData().toString()));
+    QNetworkRequest request(QUrl(BackendBaseUrl() + "/download_voice/" + voiceSelector->currentData().toString()));
     networkManager->post(request, QByteArray()); 
 }
 void TTSDock::HandleTestTTS() { ProcessChatMessage("Tester", testInput->text(), "#ffffff", "Sim"); SendToTTS(testInput->text()); testInput->clear(); }
