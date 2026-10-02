@@ -12,13 +12,12 @@ depends=('obs-studio' 'qt6-base' 'qt6-websockets'
          'python-curl_cffi' 'python-pydub' 'python-soundfile'
          'python-pathvalidate' 'python-sounddevice' 'piper-tts')
 makedepends=('cmake' 'gcc')
-# For AUR publication switch source to:
-#   "$pkgname-$pkgver.tar.gz::https://github.com/phaylali/obs-omniversify-tts/archive/refs/tags/v$pkgver.tar.gz"
-source=("$pkgname-$pkgver.tar.gz")
-sha256sums=('b8267b487c4754d57f13ee53117e234d9fdad9ab2ddfe9030de8948529d9dc39')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('c905e0bd91d0671afc3832b6905f895b64f80301f0575fa6bc20c68327f3e157')
+# Tarball extracts to obs-omniversify-tts-$pkgver/ (GitHub repo name)
 
 build() {
-  cmake -B build -S "$pkgname-$pkgver" \
+  cmake -B build -S "obs-omniversify-tts-$pkgver" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build build -j"$(nproc)"
