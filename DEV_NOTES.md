@@ -46,8 +46,25 @@ packaging/aur/
 ```bash
 ./build.sh                      # dev build → /usr/lib/obs-plugins (sudo)
 cd packaging/aur && makepkg -f  # produce the AUR package (PREFIX=/usr)
-sudo pacman -U obs-omniversify-multichat-plugin-*.pkg.tar.zst
+sudo pacman -U obs-omniejsify-multichat-plugin-*.pkg.tar.zst
 ```
+
+## Releasing
+
+One command handles GitHub + AUR together (they are **separate** repos — pushing
+to GitHub alone never updates the AUR):
+
+```bash
+./scripts/release.sh 0.3.0          # bump → tag v0.3.0 → push GitHub →
+                                    # PKGBUILD sha256 → .SRCINFO → test build → push AUR
+./scripts/release.sh 0.3.0 2        # re-release with pkgrel=2
+./scripts/release.sh 0.3.0 --dry-run  # full rehearsal, nothing pushed, tree restored
+```
+
+Requirements: clean git tree, `gh`/git push rights on GitHub, AUR SSH key
+(`~/.ssh/aur_ed25519`) registered on the AUR account. Users pick up a new
+release with `yay -Syu` (AUR helpers never auto-install — builds happen when asked).
+
 
 Quick checks after launching OBS:
 
