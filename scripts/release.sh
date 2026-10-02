@@ -86,7 +86,9 @@ for attempt in $(seq 1 10); do
   if curl -fsSL -o "$TARBALL" "$URL" 2>/dev/null; then
     # GitHub may serve a stale/placeholder archive right after a push;
     # verify it actually contains our version before trusting the hash.
-    if tar -tzf "$TARBALL" | head -1 | grep -q "$GH_REPO\|-$VERSION/"; then
+    # (sed, not head — 'tar | head' dies of SIGPIPE under pipefail)
+    FIRST_ENTRY=$(tar -tzf "$TARBALL" 2>/dev/null | sed -n '1p' || true)
+    if [[ "$FIRST_ENTRY" == *"-$VERSION/"* ]]; then
       SHA=$(sha256sum "$TARBALL" | cut -d' ' -f1)
       break
     fi
