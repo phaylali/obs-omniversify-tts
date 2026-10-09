@@ -55,6 +55,29 @@ OBS exits (or crashes)
 - Default port: `6973` (change it in the dock; stored in `~/.config/omniversify/obs-omniversify-multichat-plugin.conf`).
 - Override the backend script location with `OMNIVERSIFY_BACKEND_DIR`, the model directory with `OMNIVERSIFY_MODEL_DIR`.
 
-## License
+## Connect With Us
 
-MIT License
+- [Discord](https://discord.omniversify.com) — Join our community
+- [X/Twitter](https://twitter.com/omniversify) — Follow updates
+- [GitHub](https://github.com/phaylali) — Explore our work
+- [RSS Feed](https://omniversify.com/rss.xml) — Subscribe to updates
+
+## Support Us
+
+<p align="center">
+  <a href="https://ko-fi.com/omniversify">
+    <img src="https://raw.githubusercontent.com/phaylali/Omniversify/main/public/images/kofi_logo.svg" width="200" alt="Ko-Fi" />
+  </a>
+</p>
+
+<p align="center">
+  <strong>Keep us going</strong>
+</p>
+
+---
+
+Licensed under [The Unlicense](LICENSE.md) — public domain dedication.
+
+_Made by Moroccans, for the Omniverse_
+
+[![ReadMeSupportPalestine](https://raw.githubusercontent.com/Safouene1/support-palestine-banner/master/banner-project.svg)](https://donate.unrwa.org/-landing-page/en_EN)
